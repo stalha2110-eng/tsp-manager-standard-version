@@ -11,7 +11,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 // @ts-ignore
-import appLogo from './Assets/logo(TSPb).png';
+const appLogo = '/logo.png';
 import { 
   TrendingUp,
   Calculator,

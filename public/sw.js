@@ -80,17 +80,41 @@ self.addEventListener('fetch', (event) => {
   }
 
   event.respondWith(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.match(event.request).then((cachedResponse) => {
-        const fetchedResponse = fetch(event.request).then((networkResponse) => {
-          if (networkResponse.status === 200) {
-            cache.put(event.request, networkResponse.clone());
+    caches.match(event.request).then((cachedResponse) => {
+      if (cachedResponse) {
+        // Return cached resource immediately, and asynchronously refresh the cache in background
+        fetch(event.request)
+          .then((networkResponse) => {
+            if (networkResponse && networkResponse.status === 200) {
+              caches.open(CACHE_NAME).then((cache) => {
+                cache.put(event.request, networkResponse);
+              });
+            }
+          })
+          .catch(() => {
+            // Ignore background fetch errors (e.g. offline)
+          });
+        return cachedResponse;
+      }
+
+      // If not in cache, fetch from network
+      return fetch(event.request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const responseToCache = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(event.request, responseToCache);
+            });
           }
           return networkResponse;
+        })
+        .catch((error) => {
+          // If offline and requesting a page navigation, fallback to /index.html
+          if (event.request.mode === 'navigate') {
+            return caches.match('/index.html');
+          }
+          throw error;
         });
-
-        return cachedResponse || fetchedResponse;
-      });
     })
   );
 });

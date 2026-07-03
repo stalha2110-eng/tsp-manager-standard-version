@@ -29,6 +29,31 @@ export const getFCMToken = async (vapidKey: string): Promise<string | null> => {
     if ('serviceWorker' in navigator) {
       registration = await navigator.serviceWorker.register('/sw.js');
       console.log("FCM Service Worker (/sw.js) registered successfully:", registration);
+      
+      // Wait for the service worker to become fully active to prevent subscription failures
+      if (!registration.active) {
+        console.log("Service worker is not active yet. Waiting for activation...");
+        await new Promise<void>((resolve) => {
+          const sw = registration!.installing || registration!.waiting;
+          if (sw) {
+            const handler = (e: any) => {
+              if (e.target.state === 'activated') {
+                sw.removeEventListener('statechange', handler);
+                console.log("Service Worker activated successfully via event.");
+                resolve();
+              }
+            };
+            sw.addEventListener('statechange', handler);
+          } else {
+            resolve();
+          }
+          // Fallback timeout after 3 seconds
+          setTimeout(resolve, 3000);
+        });
+      }
+      
+      // Double check that the Service Worker is ready
+      await navigator.serviceWorker.ready;
     } else {
       throw new Error("Service workers are not supported by this browser.");
     }
