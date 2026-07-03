@@ -1,0 +1,100 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper Functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Entity Validations
+    function isValidItem(data) {
+      return data.keys().hasAll(['categoryId', 'quantity', 'buyingPrice', 'retailPrice']) &&
+             data.categoryId is string && data.categoryId.size() <= 128 &&
+             (data.quantity is int || data.quantity is float) && data.quantity >= 0 &&
+             (data.buyingPrice is int || data.buyingPrice is float) && data.buyingPrice >= 0 &&
+             (data.retailPrice is int || data.retailPrice is float) && data.retailPrice >= 0;
+    }
+
+    function isValidNote(data) {
+      return data.keys().hasAll(['title', 'category', 'priority', 'status']) &&
+             data.title is string && data.title.size() <= 200 &&
+             data.category in ['Stock', 'Payment', 'Customer', 'Supplier', 'Reminder', 'General', 'Udhar'] &&
+             data.priority in ['Urgent', 'Important', 'Completed', 'Info'] &&
+             data.status in ['Active', 'Completed'] &&
+             (!('udharAmount' in data) || data.udharAmount is int || data.udharAmount is float) &&
+             (!('udharType' in data) || data.udharType in ['give', 'take']) &&
+             (!('udharPerson' in data) || (data.udharPerson is string && data.udharPerson.size() <= 200)) &&
+             (!('udharPhone' in data) || (data.udharPhone is string && data.udharPhone.size() <= 30)) &&
+             (!('udharSettled' in data) || data.udharSettled is bool) &&
+             (!('udharPayments' in data) || data.udharPayments is list) &&
+             (!('udharItems' in data) || data.udharItems is list);
+    }
+
+    function isValidSettings(data) {
+      return true; // Simple settings validation
+    }
+
+    function isValidCategory(data) {
+      return data.keys().hasAll(['id', 'name']) &&
+             data.id is string && data.id.size() <= 128 &&
+             data.name is string && data.name.size() <= 128;
+    }
+
+    function isValidCalculation(data) {
+      return data.keys().hasAll(['id', 'expression', 'result', 'timestamp', 'createdAt', 'label']) &&
+             data.id is string && data.id.size() <= 128 &&
+             data.expression is string && data.expression.size() <= 5000 &&
+             data.result is string && data.result.size() <= 512 &&
+             data.timestamp is string && data.timestamp.size() <= 128 &&
+             data.createdAt is int &&
+             data.label is string && data.label.size() <= 256 && data.label.size() > 0;
+    }
+
+    // Collections
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow create, update: if isOwner(userId); // Settings are handled here
+
+      match /calculations/{calcId} {
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidCalculation(incoming());
+        allow delete: if isOwner(userId);
+      }
+
+      match /items/{itemId} {
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidItem(incoming());
+        allow delete: if isOwner(userId);
+      }
+
+      match /notes/{noteId} {
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidNote(incoming());
+        allow delete: if isOwner(userId);
+      }
+
+      match /categories/{catId} {
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidCategory(incoming());
+        allow delete: if isOwner(userId);
+      }
+    }
+  }
+}
