@@ -4,7 +4,7 @@ const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
   '/manifest.json',
-  '/logo.png'
+  '/logo(TSPb).png'
 ];
 
 // Give the service worker access to Firebase Messaging
@@ -29,8 +29,8 @@ messaging.onBackgroundMessage((payload) => {
   const notificationTitle = payload.notification?.title || 'TS Price Manager';
   const notificationOptions = {
     body: payload.notification?.body || 'New price update or alert is available.',
-    icon: payload.notification?.icon || '/logo.png',
-    badge: '/logo.png',
+    icon: payload.notification?.icon || '/logo(TSPb).png',
+    badge: '/logo(TSPb).png',
     data: payload.data
   };
 
