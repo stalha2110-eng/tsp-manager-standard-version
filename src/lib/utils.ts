@@ -145,13 +145,103 @@ export function triggerHapticFeedback(type: HapticType | number = 'button', cust
   }
 }
 
-export function playSynthesizedSound(type: 'success' | 'error' | 'link' | 'click') {
+export type SoundType = 'success' | 'error' | 'link' | 'click' | 'save' | 'add' | 'delete' | 'notification';
+
+export function playSynthesizedSound(type: SoundType) {
   try {
+    // Check global settings for sound
+    let soundMaster = true;
+    try {
+      const saved = localStorage.getItem('price_manager_settings');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.soundMaster !== undefined) {
+          soundMaster = parsed.soundMaster;
+        }
+      }
+    } catch (e) {
+      // Ignored
+    }
+    if (!soundMaster) return;
+
     const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
     if (!AudioContextClass) return;
     const audioCtx = new AudioContextClass();
     
-    if (type === 'success') {
+    if (type === 'save') {
+      // Premium invoice/bill checkout arpeggio: a warm chord arpeggio with a shimmering finish
+      const notes = [392.00, 493.88, 587.33, 783.99, 1046.50, 1318.51]; // G4 -> B4 -> D5 -> G5 -> C6 -> E6
+      notes.forEach((freq, i) => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        
+        // Use a triangle oscillator for a warmer, richer, organic acoustic instrument sound
+        osc.type = i < 3 ? 'triangle' : 'sine';
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime + i * 0.04);
+        
+        // Attack-Decay envelope
+        gain.gain.setValueAtTime(0, audioCtx.currentTime + i * 0.04);
+        gain.gain.linearRampToValueAtTime(0.04, audioCtx.currentTime + i * 0.04 + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + i * 0.04 + 0.4);
+        
+        osc.start(audioCtx.currentTime + i * 0.04);
+        osc.stop(audioCtx.currentTime + i * 0.04 + 0.45);
+      });
+    } else if (type === 'add') {
+      // Tactile bubble pop / click pop: extremely satisfying high-speed glide
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      
+      osc.type = 'sine';
+      // Fast pitch glide: 600Hz to 1200Hz
+      osc.frequency.setValueAtTime(600, audioCtx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + 0.06);
+      
+      gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.08);
+      
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.09);
+    } else if (type === 'delete') {
+      // Subtly sliding downward tone for removal feedback
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(450, audioCtx.currentTime);
+      osc.frequency.linearRampToValueAtTime(200, audioCtx.currentTime + 0.15);
+      
+      gain.gain.setValueAtTime(0.04, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.16);
+      
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.18);
+    } else if (type === 'notification') {
+      // Rich ambient glass chime: two beautiful resonant notes played together
+      const notes = [880.00, 1109.00]; // A5 and C#6
+      notes.forEach((freq, i) => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime + i * 0.05);
+        
+        gain.gain.setValueAtTime(0, audioCtx.currentTime + i * 0.05);
+        gain.gain.linearRampToValueAtTime(0.03, audioCtx.currentTime + i * 0.05 + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + i * 0.05 + 0.6);
+        
+        osc.start(audioCtx.currentTime + i * 0.05);
+        osc.stop(audioCtx.currentTime + i * 0.05 + 0.75);
+      });
+    } else if (type === 'success') {
       // Ascending chime: C5 (523.25) -> E5 (659.25) -> G5 (783.99) -> C6 (1046.50)
       const notes = [523.25, 659.25, 783.99, 1046.50];
       notes.forEach((freq, i) => {
@@ -199,16 +289,16 @@ export function playSynthesizedSound(type: 'success' | 'error' | 'link' | 'click
         osc.stop(audioCtx.currentTime + i * 0.15 + 0.3);
       });
     } else {
-      // Soft tap
+      // Soft tactile click
       const osc = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
       osc.connect(gain);
       gain.connect(audioCtx.destination);
       osc.frequency.setValueAtTime(1000, audioCtx.currentTime);
       gain.gain.setValueAtTime(0.04, audioCtx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.05);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.04);
       osc.start();
-      osc.stop(audioCtx.currentTime + 0.06);
+      osc.stop(audioCtx.currentTime + 0.05);
     }
   } catch (e) {
     // Ignore context blocked / disabled

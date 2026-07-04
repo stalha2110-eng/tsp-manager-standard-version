@@ -40,7 +40,7 @@ import {
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Item, Category } from '../types';
-import { triggerHapticFeedback } from '../lib/utils';
+import { triggerHapticFeedback, playSynthesizedSound } from '../lib/utils';
 import { auth, db } from '../firebase';
 import { 
   collection, 
@@ -1139,6 +1139,7 @@ export default function CalculatorWorkspace({
     setCashProvided(null);
     setManualCashInput("");
     playClickSound(1300, 0.15);
+    playSynthesizedSound('save');
   };
 
   // Restores a saved bill for editing
@@ -1157,6 +1158,7 @@ export default function CalculatorWorkspace({
   // Permanently delete specific bill
   const handleDeleteBillPermanently = (billId: string) => {
     playClickSound(950, 0.06);
+    playSynthesizedSound('delete');
     setSavedBills(prev => {
       const updated = prev.filter(b => b.id !== billId);
       localStorage.setItem('ts_saved_bills', JSON.stringify(updated));
@@ -1217,6 +1219,7 @@ export default function CalculatorWorkspace({
   // Add Item to bill and focus its Quantity Input
   const addAndFocusItem = (item: Item) => {
     playClickSound(1200, 0.05);
+    playSynthesizedSound('add');
     triggerVibration();
     
     // Add item to recent history
@@ -1259,6 +1262,7 @@ export default function CalculatorWorkspace({
 
   const addManualItem = () => {
     playClickSound(1000, 0.04);
+    playSynthesizedSound('add');
     const newBillItem: POSBillItem = {
       id: Math.random().toString(36).substring(2, 11),
       name: `Manual Item #${billItems.length + 1}`,
@@ -1416,6 +1420,7 @@ export default function CalculatorWorkspace({
 
   const removeBillItem = (id: string) => {
     playClickSound(900, 0.04);
+    playSynthesizedSound('delete');
     setBillItems(prev => prev.filter(item => item.id !== id));
   };
 

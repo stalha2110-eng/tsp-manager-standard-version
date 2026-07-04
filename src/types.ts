@@ -108,6 +108,7 @@ export interface AppSettings {
   hapticError?: boolean;
   hapticSuccess?: boolean;
   hapticIntensity?: 'very_light' | 'light' | 'medium' | 'strong';
+  soundMaster?: boolean;
 }
 
 export interface AppState {

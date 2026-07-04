@@ -251,8 +251,8 @@ export function WebPushNotificationCard({ onTriggerToast }: WebPushNotificationC
         navigator.serviceWorker.ready.then((registration) => {
           registration.showNotification("TS Price Manager", {
             body: "🚀 Web Push Notifications setup is fully active and working perfectly!",
-            icon: "/logo.png",
-            badge: "/logo.png",
+            icon: "/logo(TSPb).png",
+            badge: "/logo(TSPb).png",
             vibrate: [200, 100, 200],
             tag: "fcm-test-notification",
             data: { url: window.location.origin }
@@ -265,7 +265,7 @@ export function WebPushNotificationCard({ onTriggerToast }: WebPushNotificationC
         // Fallback to simple Notification
         new Notification("TS Price Manager", {
           body: "🚀 Web Push Notifications setup is active and working perfectly!",
-          icon: "/logo.png"
+          icon: "/logo(TSPb).png"
         });
         playSynthesizedSound("success");
         onTriggerToast("Test notification dispatched", "success");

@@ -11,7 +11,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 // @ts-ignore
-const appLogo = '/logo.png';
+const appLogo = '/logo(TSPb).png';
 import { 
   TrendingUp,
   Calculator,
@@ -89,6 +89,7 @@ import {
   Paperclip,
   Zap,
   Check,
+  CheckCheck,
   Eye,
   Info,
   Shield,
@@ -154,7 +155,8 @@ import {
   cn, 
   formatCurrency, 
   formatNumber,
-  triggerHapticFeedback
+  triggerHapticFeedback,
+  playSynthesizedSound
 } from './lib/utils';
 import { translateItemName, generatePriceAdvisory, getSmartNoteCategorization } from './services/geminiService';
 
@@ -166,6 +168,7 @@ interface SnappyInputProps extends Omit<React.InputHTMLAttributes<HTMLInputEleme
 function SnappyInput({ value, onChange, ...props }: SnappyInputProps) {
   const [localValue, setLocalValue] = React.useState(String(value ?? ''));
   const isFocused = React.useRef(false);
+  const timerRef = React.useRef<any>(null);
 
   React.useEffect(() => {
     if (!isFocused.current) {
@@ -173,15 +176,25 @@ function SnappyInput({ value, onChange, ...props }: SnappyInputProps) {
     }
   }, [value]);
 
+  React.useEffect(() => {
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+      }
+    };
+  }, []);
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     setLocalValue(val);
     
-    // Defer the parent state update to the next event loop tick
-    const timer = setTimeout(() => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+    }
+    
+    timerRef.current = setTimeout(() => {
       onChange(val);
-    }, 0);
-    return () => clearTimeout(timer);
+    }, 40);
   };
 
   return (
@@ -195,6 +208,9 @@ function SnappyInput({ value, onChange, ...props }: SnappyInputProps) {
       }}
       onBlur={(e) => {
         isFocused.current = false;
+        if (timerRef.current) {
+          clearTimeout(timerRef.current);
+        }
         onChange(e.target.value);
         props.onBlur?.(e);
       }}
@@ -294,6 +310,7 @@ const INITIAL_SETTINGS: AppSettings = {
   hapticError: true,
   hapticSuccess: true,
   hapticIntensity: 'light',
+  soundMaster: true,
 };
 
 const getInitialState = (): AppState => {
@@ -659,62 +676,6 @@ function ToastContainer({ toasts, onClose }: {
   );
 }
 
-function SplashScreen({ onComplete }: { onComplete: () => void }) {
-  useEffect(() => {
-    const timer = setTimeout(onComplete, 600);
-    return () => clearTimeout(timer);
-  }, [onComplete]);
-
-  return (
-    <motion.div 
-      initial={{ opacity: 1 }}
-      exit={{ opacity: 0, y: -20 }}
-      className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-[#0a0c10]"
-    >
-      <motion.div
-        initial={{ scale: 0.9, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        transition={{ duration: 0.3, ease: "easeOut" }}
-        className="flex flex-col items-center"
-      >
-        <div className="relative mb-8">
-          <motion.div 
-            className="absolute inset-0 bg-amber-500 blur-[60px] opacity-20"
-            animate={{ scale: [1, 1.2, 1], opacity: [0.2, 0.4, 0.2] }}
-            transition={{ duration: 1.5, repeat: Infinity }}
-          />
-          <div className="relative h-40 w-40 rounded-[2.5rem] bg-gradient-to-br from-slate-800 to-slate-900 p-1 border border-white/10 shadow-2xl overflow-hidden">
-             <img src={appLogo} alt="TS" className="h-full w-full object-contain" />
-          </div>
-        </div>
-
-        <motion.div
-          initial={{ y: 10, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.1, duration: 0.3 }}
-          className="text-center"
-        >
-          <h1 className="text-4xl font-black tracking-tighter text-white">
-            TS <span className="text-amber-500">PRICE</span> MANAGER
-          </h1>
-          <p className="mt-2 text-[10px] font-black uppercase tracking-[0.5em] text-white/30">
-            Enterprise Pricing Core v2.5
-          </p>
-        </motion.div>
-        
-        <div className="mt-12 w-48 h-1 bg-white/5 rounded-full overflow-hidden">
-          <motion.div 
-            className="h-full bg-amber-500"
-            initial={{ width: "0%" }}
-            animate={{ width: "100%" }}
-            transition={{ duration: 0.45, ease: "easeInOut" }}
-          />
-        </div>
-      </motion.div>
-    </motion.div>
-  );
-}
-
 // --- App Component ---
 export default function App() {
   const [state, setState] = useState<AppState>(INITIAL_STATE);
@@ -765,7 +726,7 @@ export default function App() {
   const [showCategoryAddModal, setShowCategoryAddModal] = useState(false);
   const [showAddMenu, setShowAddMenu] = useState(false);
   const [showSmartEntry, setShowSmartEntry] = useState(false);
-  const [isInitializing, setIsInitializing] = useState(true);
+  const [isInitializing, setIsInitializing] = useState(false);
   const [isAuthChecking, setIsAuthChecking] = useState(true);
   const [editingItem, setEditingItem] = useState<Item | null>(null);
   const [previewingItem, setPreviewingItem] = useState<Item | null>(null);
@@ -899,17 +860,17 @@ export default function App() {
         navigator.serviceWorker.ready.then((registration) => {
           registration.showNotification(title, {
             body,
-            icon: '/logo.png',
-            badge: '/logo.png',
+            icon: '/logo(TSPb).png',
+            badge: '/logo(TSPb).png',
             vibrate: [200, 100, 200],
             tag: id,
             data: { url: window.location.origin }
           } as any);
         }).catch(() => {
-          new Notification(title, { body, icon: '/logo.png' });
+          new Notification(title, { body, icon: '/logo(TSPb).png' });
         });
       } else {
-        new Notification(title, { body, icon: '/logo.png' });
+        new Notification(title, { body, icon: '/logo(TSPb).png' });
       }
     };
 
@@ -1701,6 +1662,7 @@ export default function App() {
         items: [newItem, ...prev.items]
       }));
       setShowAddItem(false);
+      playSynthesizedSound('success');
 
       if (state.user && state.settings.autoCloudSync) {
         await addDoc(collection(db, 'users', state.user.uid, 'items'), newItem);
@@ -1814,6 +1776,7 @@ export default function App() {
       }
     }
     
+    playSynthesizedSound('delete');
     setDeleteConfirmation({ show: false, type: 'single' });
   };
   
@@ -1845,6 +1808,7 @@ export default function App() {
     }));
     setShowAddNote(false);
     setActiveTab('notes');
+    playSynthesizedSound('success');
     triggerToast("Note synchronized with Local Matrix.", "success");
 
     if (state.user && state.settings.autoCloudSync) {
@@ -1895,6 +1859,7 @@ export default function App() {
     for (const id of ids) {
       await handleDeleteNote(id);
     }
+    playSynthesizedSound('delete');
     setSelectedNoteIds(prev => prev.filter(x => !ids.includes(x)));
     setNoteDeleteConfirmation({ show: false, ids: [] });
   };
@@ -1985,9 +1950,11 @@ export default function App() {
     };
   }, [state.settings.theme, selectedPalette, selectedSpeed, state.settings.enableBgColorChange]);
 
-  if (isInitializing || isAuthChecking) {
+  if (isAuthChecking) {
     return (
-      <SplashScreen onComplete={() => setIsInitializing(false)} />
+      <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-[#0a0c10]">
+        <div className="h-10 w-10 border-4 border-amber-500/20 border-t-amber-500 rounded-full animate-spin" />
+      </div>
     );
   }
 
@@ -2010,9 +1977,6 @@ export default function App() {
         state.settings.theme === 'ultra_premium' && (state.settings.enableBgColorChange !== false ? "animate-ultra-premium-aurora" : "bg-[var(--background)]")
       )}
     >
-      <AnimatePresence>
-        {isInitializing && <SplashScreen onComplete={() => setIsInitializing(false)} />}
-      </AnimatePresence>
 
       {/* Dynamic Background Elements for Specific Themes with Premium Cross-Fade */}
       <AnimatePresence mode="popLayout">
@@ -2360,13 +2324,11 @@ export default function App() {
 
       {/* Main Content */}
       <main className="container mx-auto p-4 overflow-hidden">
-        <AnimatePresence mode="wait">
-        {activeTab === 'home' && (
+        {/* Home Tab */}
+        <div className={cn("transition-all duration-150", activeTab === 'home' ? "opacity-100 block" : "opacity-0 hidden")}>
           <motion.div 
-            key="home"
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 20 }}
+            animate={activeTab === 'home' ? { opacity: 1, x: 0 } : { opacity: 0, x: -10 }}
+            transition={{ duration: 0.15 }}
             className="space-y-12"
           >
             {/* Price Volatility Module */}
@@ -2626,7 +2588,7 @@ export default function App() {
                      onChange={val => setSearchQuery(val)}
                    />
                  </div>
- 
+  
                  <div className="flex items-center justify-between px-1">
                     <div className="flex items-center gap-2">
                       <span className="h-1.5 w-1.5 rounded-full bg-[var(--primary)] animate-pulse" />
@@ -2683,14 +2645,13 @@ export default function App() {
               </motion.div>
             </div>
           </motion.div>
-        )}
+        </div>
 
-        {activeTab === 'notifications' && (
+        {/* Notifications Tab */}
+        <div className={cn("transition-all duration-150", activeTab === 'notifications' ? "opacity-100 block" : "opacity-0 hidden")}>
           <motion.div 
-            key="notifications"
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 20 }}
+            animate={activeTab === 'notifications' ? { opacity: 1, x: 0 } : { opacity: 0, x: -10 }}
+            transition={{ duration: 0.15 }}
             className="space-y-8"
           >
             <NotificationsSyncScreen 
@@ -2698,6 +2659,8 @@ export default function App() {
               items={state.items}
               dismissed={state.settings.dismissedNotifications || []}
               currentTime={currentTime}
+              onDismiss={(id) => handleUpdateSettings({ dismissedNotifications: [...state.settings.dismissedNotifications, id] })}
+              onDismissAll={(ids) => handleUpdateSettings({ dismissedNotifications: [...state.settings.dismissedNotifications, ...ids] })}
               onViewNote={(noteId) => {
                 const found = state.notes.find(n => n.id === noteId);
                 if (found) setEditingNote(found);
@@ -2715,14 +2678,13 @@ export default function App() {
               t={t}
             />
           </motion.div>
-        )}
+        </div>
 
-        {activeTab === 'notes' && (
+        {/* Notes Tab */}
+        <div className={cn("transition-all duration-150", activeTab === 'notes' ? "opacity-100 block" : "opacity-0 hidden")}>
           <motion.div 
-            key="notes"
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 20 }}
+            animate={activeTab === 'notes' ? { opacity: 1, x: 0 } : { opacity: 0, x: -10 }}
+            transition={{ duration: 0.15 }}
             className="space-y-8"
           >
             <NotesDashboard 
@@ -2749,52 +2711,50 @@ export default function App() {
               onOpenNoteDetail={(note) => setEditingNote(note)}
             />
           </motion.div>
-        )}
+        </div>
 
-        {activeTab === 'settings' && (
+        {/* Settings Tab */}
+        <div className={cn("transition-all duration-150", activeTab === 'settings' ? "opacity-100 block" : "opacity-0 hidden")}>
           <motion.div 
-            key="settings"
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 20 }}
+            animate={activeTab === 'settings' ? { opacity: 1, x: 0 } : { opacity: 0, x: -10 }}
+            transition={{ duration: 0.15 }}
           >
-          <SettingsScreen 
-            state={state} 
-            t={t} 
-            onUpdate={handleUpdateSettings} 
-            onShowHelp={() => setShowHelp(true)}
-            onResetPIN={() => {
-              if (state.settings.pin) {
-                setIsVerifyingOldPIN(true);
-                setShowChangePIN(true);
-              } else {
-                setIsVerifyingOldPIN(false);
-                setShowChangePIN(true);
-              }
-            }}
-            onExportExcel={exportToExcel}
-            onExportPDF={exportToPDF}
-            onImport={importData}
-            onBackup={handleBackup}
-            onRestore={handleRestore}
-            onClearCache={() => {
-              if (confirm('Wipe everything?')) {
-                localStorage.clear();
-                window.location.reload();
-              }
-            }}
-            isSyncing={isSyncing}
-            isExporting={isExporting}
-          />
+            <SettingsScreen 
+              state={state} 
+              t={t} 
+              onUpdate={handleUpdateSettings} 
+              onShowHelp={() => setShowHelp(true)}
+              onResetPIN={() => {
+                if (state.settings.pin) {
+                  setIsVerifyingOldPIN(true);
+                  setShowChangePIN(true);
+                } else {
+                  setIsVerifyingOldPIN(false);
+                  setShowChangePIN(true);
+                }
+              }}
+              onExportExcel={exportToExcel}
+              onExportPDF={exportToPDF}
+              onImport={importData}
+              onBackup={handleBackup}
+              onRestore={handleRestore}
+              onClearCache={() => {
+                if (confirm('Wipe everything?')) {
+                  localStorage.clear();
+                  window.location.reload();
+                }
+              }}
+              isSyncing={isSyncing}
+              isExporting={isExporting}
+            />
           </motion.div>
-        )}
+        </div>
 
-        {activeTab === 'profile' && (
+        {/* Profile Tab */}
+        <div className={cn("transition-all duration-150", activeTab === 'profile' ? "opacity-100 block" : "opacity-0 hidden")}>
           <motion.div 
-            key="profile"
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 20 }}
+            animate={activeTab === 'profile' ? { opacity: 1, x: 0 } : { opacity: 0, x: -10 }}
+            transition={{ duration: 0.15 }}
           >
             <ProfileScreen 
               state={state} 
@@ -2807,14 +2767,13 @@ export default function App() {
               onTriggerToast={triggerToast}
             />
           </motion.div>
-        )}
+        </div>
 
-        {activeTab === 'calculator' && (
+        {/* Calculator Tab */}
+        <div className={cn("transition-all duration-150", activeTab === 'calculator' ? "opacity-100 block" : "opacity-0 hidden")}>
           <motion.div 
-            key="calculator"
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 20 }}
+            animate={activeTab === 'calculator' ? { opacity: 1, x: 0 } : { opacity: 0, x: -10 }}
+            transition={{ duration: 0.15 }}
           >
             <CalculatorWorkspace 
               items={state.items}
@@ -2825,8 +2784,7 @@ export default function App() {
               onUpdateItem={handleUpdateItem}
             />
           </motion.div>
-        )}
-        </AnimatePresence>
+        </div>
       </main>
 
       {/* Bottom Nav */}
@@ -3871,7 +3829,7 @@ const PremiumProfileIcon = ({ active }: { active: boolean }) => (
   </motion.div>
 );
 
-function NavButton({ active, icon, label, onClick }: { active: boolean; icon: React.ReactNode; label: string; onClick: () => void }) {
+const NavButton = React.memo(({ active, icon, label, onClick }: { active: boolean; icon: React.ReactNode; label: string; onClick: () => void }) => {
   const handleClick = () => {
     triggerHapticFeedback(15);
     onClick();
@@ -3907,7 +3865,7 @@ function NavButton({ active, icon, label, onClick }: { active: boolean; icon: Re
       )}
     </motion.button>
   );
-}
+});
 
 /**
  * HelpModal Sub-component
@@ -4500,6 +4458,8 @@ export function NotificationsSyncScreen({
   items, 
   dismissed,
   currentTime,
+  onDismiss,
+  onDismissAll,
   onViewNote,
   onViewItem,
   isOnline,
@@ -4514,6 +4474,8 @@ export function NotificationsSyncScreen({
   items: Item[]; 
   dismissed: string[];
   currentTime: Date;
+  onDismiss: (id: string) => void;
+  onDismissAll: (ids: string[]) => void;
   onViewNote: (id: string) => void;
   onViewItem: (id: string) => void;
   isOnline: boolean;
@@ -4535,38 +4497,44 @@ export function NotificationsSyncScreen({
     // 1. Low stock alerts (items with quantity <= 5)
     items.forEach(item => {
       if (item.quantity <= 5) {
-        list.push({
-          id: `stock-${item.id}`,
-          type: 'stock',
-          title: `⚠️ Low Stock Alert: ${item.translations?.en || item.name}`,
-          description: `Only ${item.quantity} ${item.unit || 'PCS'} left in physical inventory. Recommended reorder milestone reached.`,
-          timestamp: new Date().toISOString(),
-          priority: item.quantity === 0 ? 'Urgent' : 'Medium',
-          icon: <Package size={20} className="text-amber-400" />,
-          itemId: item.id
-        });
+        const id = `stock-${item.id}`;
+        if (!dismissed.includes(id)) {
+          list.push({
+            id,
+            type: 'stock',
+            title: `⚠️ Low Stock Alert: ${item.translations?.en || item.name}`,
+            description: `Only ${item.quantity} ${item.unit || 'PCS'} left in physical inventory. Recommended reorder milestone reached.`,
+            timestamp: new Date().toISOString(),
+            priority: item.quantity === 0 ? 'Urgent' : 'Medium',
+            icon: <Package size={20} className="text-amber-400" />,
+            itemId: item.id
+          });
+        }
       }
     });
 
     // 2. Active Unsettled Udhar Ledgers (Overdue or Due soon)
     notes.forEach(note => {
       if (note.status === 'Active' && note.udharPerson) {
-        const isOverdue = note.dueDate ? new Date(note.dueDate) < currentTime : false;
-        list.push({
-          id: `udhar-${note.id}`,
-          type: 'udhar',
-          title: `${isOverdue ? '🔴 Overdue Udhar' : '📅 Pending Settlement'}: ${note.udharPerson}`,
-          description: `Outstanding Balance: ₹${(Number(note.udharAmount || 0) - (note.udharPayments?.reduce((s, p) => s + p.amount, 0) || 0)).toLocaleString()}. Due: ${note.dueDate ? new Date(note.dueDate).toLocaleDateString() : 'Unspecified'}`,
-          timestamp: note.createdAt,
-          priority: isOverdue ? 'Urgent' : 'Low',
-          icon: <CreditCard size={20} className="text-red-400" />,
-          noteId: note.id
-        });
+        const id = `udhar-${note.id}`;
+        if (!dismissed.includes(id)) {
+          const isOverdue = note.dueDate ? new Date(note.dueDate) < currentTime : false;
+          list.push({
+            id,
+            type: 'udhar',
+            title: `${isOverdue ? '🔴 Overdue Udhar' : '📅 Pending Settlement'}: ${note.udharPerson}`,
+            description: `Outstanding Balance: ₹${(Number(note.udharAmount || 0) - (note.udharPayments?.reduce((s, p) => s + p.amount, 0) || 0)).toLocaleString()}. Due: ${note.dueDate ? new Date(note.dueDate).toLocaleDateString() : 'Unspecified'}`,
+            timestamp: note.createdAt,
+            priority: isOverdue ? 'Urgent' : 'Low',
+            icon: <CreditCard size={20} className="text-red-400" />,
+            noteId: note.id
+          });
+        }
       }
     });
 
     return list;
-  }, [notes, items, currentTime]);
+  }, [notes, items, currentTime, dismissed]);
 
   const triggerRetry = () => {
     if (isRetrying) return;
@@ -4730,40 +4698,105 @@ export function NotificationsSyncScreen({
                 </div>
               </div>
             ) : (
-              <div className="grid grid-cols-1 gap-3.5">
-                {activeAlerts.map(alert => (
-                  <div
-                    key={alert.id}
-                    onClick={() => {
-                      if (alert.type === 'stock') onViewItem(alert.itemId);
-                      if (alert.type === 'udhar') onViewNote(alert.noteId);
-                    }}
-                    className={cn(
-                      "group p-5 rounded-2xl border transition-all cursor-pointer relative overflow-hidden flex items-center gap-4 hover:scale-[1.01] duration-200 text-left",
-                      alert.priority === 'Urgent' ? "bg-red-500/5 border-red-500/20 hover:border-red-500/40" : "bg-[var(--card)]/80 border-white/5 hover:border-amber-500/30"
-                    )}
-                  >
-                    <div className="h-10 w-10 rounded-xl bg-white/5 flex items-center justify-center shrink-0">
-                      {alert.icon}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-black text-white truncate uppercase tracking-tight">{alert.title}</span>
-                        <span className={cn(
-                          "text-[8px] font-black uppercase px-2 py-0.5 rounded-full",
-                          alert.priority === 'Urgent' ? "bg-red-500 text-white" : "bg-white/10 text-slate-300"
-                        )}>
-                          {alert.priority}
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-400 mt-1 line-clamp-1">{alert.description}</p>
-                    </div>
-                    <div className="shrink-0 text-right">
-                      <span className="text-[9px] font-bold text-slate-500 block uppercase">Realtime Feed</span>
-                      <span className="text-[8px] font-bold text-slate-600 block uppercase">Tap to resolve</span>
-                    </div>
+              <div className="space-y-3.5">
+                {/* Control Action Bar with Mark All Read & Info Indicator */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-white/5 p-4 rounded-2xl border border-white/5">
+                  <div className="flex items-center gap-2 text-left">
+                    <span className="relative flex h-2 w-2 shrink-0">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500" />
+                    </span>
+                    <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                      💡 Swipe left on any alert to dismiss/delete it permanently
+                    </p>
                   </div>
-                ))}
+                  <button
+                    onClick={() => {
+                      const idsToDismiss = activeAlerts.map(a => a.id);
+                      onDismissAll(idsToDismiss);
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500 text-amber-400 hover:text-slate-950 text-[10px] font-black uppercase tracking-wider transition-all border border-amber-500/20 hover:border-transparent cursor-pointer self-start sm:self-center"
+                  >
+                    <CheckCheck size={12} /> Mark All as Read
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3.5">
+                  <AnimatePresence mode="popLayout">
+                    {activeAlerts.map(alert => (
+                      <motion.div
+                        key={alert.id}
+                        layout
+                        initial={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, x: -150, height: 0, scale: 0.9, marginBottom: 0, transition: { duration: 0.25 } }}
+                        className="relative overflow-hidden rounded-2xl"
+                      >
+                        {/* Background Trash Reveal Action */}
+                        <div className="absolute inset-y-0 right-0 w-24 bg-red-500/20 border-l border-red-500/30 flex flex-col items-center justify-center text-red-400 gap-1 rounded-r-2xl">
+                          <Trash2 size={16} className="animate-bounce" />
+                          <span className="text-[9px] font-black uppercase tracking-wider">Dismiss</span>
+                        </div>
+
+                        {/* Swipeable Foreground Container */}
+                        <motion.div
+                          drag="x"
+                          dragDirectionLock
+                          dragConstraints={{ left: -96, right: 0 }}
+                          dragElastic={{ left: 0.1, right: 0 }}
+                          onDragEnd={(event, info) => {
+                            if (info.offset.x < -60 || info.velocity.x < -200) {
+                              onDismiss(alert.id);
+                            }
+                          }}
+                          className={cn(
+                            "group p-5 rounded-2xl border transition-all cursor-pointer relative overflow-hidden flex items-center gap-4 text-left z-10 bg-[#0d1117] select-none",
+                            alert.priority === 'Urgent' ? "bg-red-500/5 border-red-500/20 hover:border-red-500/40" : "bg-[var(--card)]/80 border-white/5 hover:border-amber-500/30"
+                          )}
+                          style={{ touchAction: 'pan-y' }}
+                        >
+                          <div 
+                            className="h-10 w-10 rounded-xl bg-white/5 flex items-center justify-center shrink-0"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (alert.type === 'stock') onViewItem(alert.itemId);
+                              if (alert.type === 'udhar') onViewNote(alert.noteId);
+                            }}
+                          >
+                            {alert.icon}
+                          </div>
+                          <div 
+                            className="flex-1 min-w-0"
+                            onClick={(e) => {
+                              if (alert.type === 'stock') onViewItem(alert.itemId);
+                              if (alert.type === 'udhar') onViewNote(alert.noteId);
+                            }}
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-black text-white truncate uppercase tracking-tight">{alert.title}</span>
+                              <span className={cn(
+                                "text-[8px] font-black uppercase px-2 py-0.5 rounded-full",
+                                alert.priority === 'Urgent' ? "bg-red-500 text-white" : "bg-white/10 text-slate-300"
+                              )}>
+                                {alert.priority}
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-400 mt-1 line-clamp-1">{alert.description}</p>
+                          </div>
+                          <div 
+                            className="shrink-0 text-right"
+                            onClick={(e) => {
+                              if (alert.type === 'stock') onViewItem(alert.itemId);
+                              if (alert.type === 'udhar') onViewNote(alert.noteId);
+                            }}
+                          >
+                            <span className="text-[9px] font-bold text-slate-500 block uppercase">Realtime Feed</span>
+                            <span className="text-[8px] font-bold text-slate-600 block uppercase">Tap to resolve</span>
+                          </div>
+                        </motion.div>
+                      </motion.div>
+                    ))}
+                  </AnimatePresence>
+                </div>
               </div>
             )}
           </motion.div>
@@ -5469,6 +5502,40 @@ function SettingsScreen({
             )}
           >
             <div className={cn("absolute top-0.5 left-0.5 h-6 w-6 rounded-full bg-white shadow-xl transition-all", (state.settings.hapticMaster ?? true) ? "translate-x-7" : "")} />
+          </button>
+        </div>
+      )
+    },
+    {
+      id: 'sound_master',
+      name: "Master Sound Effects",
+      description: "Toggle global premium acoustic synthesizer tones for actions and confirmations.",
+      category: 'app' as const,
+      subcategory: "Acoustic Master",
+      keywords: ["sound", "audio", "beep", "tone", "chime", "synthesizer", "play", "master", "effects", "volume"],
+      render: () => (
+        <div className="flex items-center justify-between p-4 rounded-xl bg-slate-900/10 dark:bg-zinc-800/10 border border-[var(--border)] text-left">
+          <div>
+            <p className="text-[10px] opacity-60 uppercase font-black">Enable UI Sound Effects</p>
+            <p className="text-[8px] opacity-40 mt-1 uppercase">Master control for high-fidelity confirmation tones</p>
+          </div>
+          <button
+            onClick={() => {
+              const nextVal = !(state.settings.soundMaster ?? true);
+              onUpdate({ soundMaster: nextVal });
+              if (nextVal) {
+                setTimeout(() => {
+                  playSynthesizedSound('success');
+                }, 100);
+              }
+              trackSettingInteraction('sound_master');
+            }}
+            className={cn(
+              "h-7 w-14 rounded-full transition-all relative overflow-hidden ring-1 ring-white/10 shadow-inner cursor-pointer border-0",
+              (state.settings.soundMaster ?? true) ? "bg-amber-500" : "bg-slate-800"
+            )}
+          >
+            <div className={cn("absolute top-0.5 left-0.5 h-6 w-6 rounded-full bg-white shadow-xl transition-all", (state.settings.soundMaster ?? true) ? "translate-x-7" : "")} />
           </button>
         </div>
       )

@@ -4,7 +4,7 @@ const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
   '/manifest.json',
-  '/logo.png'
+  '/logo(TSPb).png'
 ];
 
 // Give the service worker access to Firebase Messaging
@@ -29,8 +29,8 @@ messaging.onBackgroundMessage((payload) => {
   const notificationTitle = payload.notification?.title || 'TS Price Manager';
   const notificationOptions = {
     body: payload.notification?.body || 'New price update or alert is available.',
-    icon: payload.notification?.icon || '/logo.png',
-    badge: '/logo.png',
+    icon: payload.notification?.icon || '/logo(TSPb).png',
+    badge: '/logo(TSPb).png',
     data: payload.data
   };
 
@@ -118,3 +118,40 @@ self.addEventListener('fetch', (event) => {
     })
   );
 });
+
+// Handle notification click event to open or focus the app window
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+
+  // Extract target URL from notification data
+  let targetUrl = self.location.origin;
+  if (event.notification.data) {
+    // Standard FCM payload format or custom data object
+    if (event.notification.data.url) {
+      targetUrl = event.notification.data.url;
+    } else if (event.notification.data.link) {
+      targetUrl = event.notification.data.link;
+    } else if (event.notification.data.FCM_MSG && event.notification.data.FCM_MSG.notification && event.notification.data.FCM_MSG.notification.click_action) {
+      targetUrl = event.notification.data.FCM_MSG.notification.click_action;
+    }
+  }
+
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      // Find an existing client window/tab
+      for (const client of clientList) {
+        if (client.url.startsWith(self.location.origin) && 'focus' in client) {
+          if (client.navigate) {
+            client.navigate(targetUrl).catch(err => console.error('Failed to navigate client:', err));
+          }
+          return client.focus();
+        }
+      }
+      // If no window is open, open a new one
+      if (self.clients.openWindow) {
+        return self.clients.openWindow(targetUrl);
+      }
+    })
+  );
+});
+

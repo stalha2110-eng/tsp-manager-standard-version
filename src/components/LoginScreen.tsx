@@ -185,7 +185,7 @@ export function LoginScreen({ onGoogleLogin, onGuestLogin }: LoginScreenProps) {
         <div className="flex items-center justify-between max-w-7xl mx-auto w-full">
           <div className="flex items-center gap-3">
             <div className="relative overflow-hidden h-9 w-9 rounded-xl bg-gradient-to-br from-slate-800 to-slate-900 flex items-center justify-center p-1 border border-white/10 shadow-lg">
-              <img src="/logo.png" alt="TS" className="w-full h-full object-contain" />
+              <img src="/logo(TSPb).png" alt="TS" className="w-full h-full object-contain" />
             </div>
             <div>
               <h1 className="text-lg font-black tracking-tighter text-white leading-none">
@@ -218,7 +218,7 @@ export function LoginScreen({ onGoogleLogin, onGuestLogin }: LoginScreenProps) {
           <div className="relative group">
             <div className="absolute inset-0 bg-gradient-to-tr from-amber-500 to-indigo-600 blur-2xl opacity-40 group-hover:opacity-60 transition-opacity rounded-3xl" />
             <div className="relative h-20 w-20 rounded-[2rem] bg-gradient-to-br from-slate-800 to-slate-900 border-2 border-white/10 flex items-center justify-center p-2.5 shadow-2xl transform group-hover:scale-105 transition-transform duration-500">
-              <img src="/logo.png" alt="TS Price Logo" className="w-full h-full object-contain" />
+              <img src="/logo(TSPb).png" alt="TS Price Logo" className="w-full h-full object-contain" />
             </div>
           </div>
 
