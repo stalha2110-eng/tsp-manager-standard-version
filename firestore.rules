@@ -54,7 +54,9 @@ service cloud.firestore {
     function isValidCategory(data) {
       return data.keys().hasAll(['id', 'name']) &&
              data.id is string && data.id.size() <= 128 &&
-             data.name is string && data.name.size() <= 128;
+             data.name is string && data.name.size() <= 128 &&
+             (!('icon' in data) || (data.icon is string && data.icon.size() <= 128)) &&
+             (!('color' in data) || (data.color is string && data.color.size() <= 128));
     }
 
     function isValidCalculation(data) {

@@ -104,7 +104,6 @@ import { PINScreen } from './components/ui/PINScreen';
 import { UnitSelectorModal } from './components/ui/UnitSelectorModal';
 import { LoginScreen } from './components/LoginScreen';
 import { AccountSyncCard } from './components/AccountSyncCard';
-import { WebPushNotificationCard } from './components/WebPushNotificationCard';
 import { SmartEntryModal } from './components/SmartEntryModal';
 import { CategoryAddModal } from './components/CategoryAddModal';
 import CalculatorWorkspace from './components/CalculatorWorkspace';
@@ -747,6 +746,7 @@ export default function App() {
     ids: string[];
   }>({ show: false, ids: [] });
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [showNotificationPrompt, setShowNotificationPrompt] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
@@ -767,6 +767,134 @@ export default function App() {
 
   // Global Toast Notifications System
   const [toasts, setToasts] = useState<{ id: string; message: string; type: 'success' | 'error' | 'info' | 'warning' }[]>([]);
+
+  // State and logic for search voice recognition
+  const [isListeningSearchVoice, setIsListeningSearchVoice] = useState(false);
+
+  const startSearchVoiceSearch = () => {
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+      triggerToast("Voice search is not supported in this browser environment.", "error");
+      return;
+    }
+    try {
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      const recognition = new SpeechRecognition();
+      recognition.lang = state.settings.language === 'hi' ? 'hi-IN' : state.settings.language === 'mr' ? 'mr-IN' : 'en-US';
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
+
+      setIsListeningSearchVoice(true);
+      playSynthesizedSound('success');
+      recognition.start();
+
+      recognition.onresult = (event: any) => {
+        const text = event.results[0][0].transcript;
+        setSearchQuery(text);
+        setIsListeningSearchVoice(false);
+        triggerToast(`Voice Search: "${text}"`, "success");
+      };
+
+      recognition.onerror = () => {
+        setIsListeningSearchVoice(false);
+      };
+
+      recognition.onend = () => {
+        setIsListeningSearchVoice(false);
+      };
+    } catch (e) {
+      setIsListeningSearchVoice(false);
+    }
+  };
+
+  // Graceful Push Notification automatic prompt for first-time and new users on initial app launch
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!('Notification' in window)) return;
+    if (Notification.permission === 'granted' || Notification.permission === 'denied') return;
+
+    const alreadyPrompted = localStorage.getItem('ts_push_prompt_dismissed') === 'true';
+    if (alreadyPrompted) return;
+
+    // Trigger after tour is dismissed or if returning user who has not been prompted yet
+    if (state.settings.hasSeenOnboarding === true && !isInitializing) {
+      const timer = setTimeout(() => {
+        setShowNotificationPrompt(true);
+      }, 2500); // Gentle delay for premium feel
+      return () => clearTimeout(timer);
+    }
+  }, [state.settings.hasSeenOnboarding, isInitializing]);
+
+  // Dynamic active alerts count matching the actual items shown in Notifications Sync Screen
+  const activeAlertsCount = useMemo(() => {
+    let count = 0;
+    const dismissed = state.settings.dismissedNotifications || [];
+    
+    // 1. Low stock alerts (items with quantity <= 5)
+    state.items.forEach(item => {
+      if (item.quantity <= 5) {
+        const id = `stock-${item.id}`;
+        if (!dismissed.includes(id)) {
+          count++;
+        }
+      }
+    });
+
+    // 2. Active Unsettled Udhar Ledgers (Overdue or Due soon)
+    state.notes.forEach(note => {
+      if (note.status === 'Active' && note.udharPerson) {
+        const id = `udhar-${note.id}`;
+        if (!dismissed.includes(id)) {
+          count++;
+        }
+      }
+    });
+
+    return count;
+  }, [state.notes, state.items, state.settings.dismissedNotifications]);
+
+  // Deep Link handler for Push Notifications actionUrl clicks
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
+    const parseUrlAndNavigate = () => {
+      const params = new URLSearchParams(window.location.search);
+      const action = params.get('action');
+      const id = params.get('id');
+      if (!action || !id) return;
+
+      if (action === 'view_item' && state.items.length > 0) {
+        const item = state.items.find(i => i.id === id);
+        if (item) {
+          // Clear query parameters from URL so they don't trigger repeatedly on refreshes
+          const newUrl = window.location.pathname + window.location.hash;
+          window.history.replaceState({}, '', newUrl);
+          
+          setActiveTab('home');
+          setSearchQuery(item.translations?.en || item.name);
+          setPreviewingItem(item);
+        }
+      } else if (action === 'view_note' && state.notes.length > 0) {
+        const note = state.notes.find(n => n.id === id);
+        if (note) {
+          // Clear query parameters
+          const newUrl = window.location.pathname + window.location.hash;
+          window.history.replaceState({}, '', newUrl);
+
+          setActiveTab('notes');
+          setEditingNote(note);
+        }
+      }
+    };
+
+    // Run on state items/notes changes
+    parseUrlAndNavigate();
+
+    // Also listen to location / popstate events just in case
+    window.addEventListener('popstate', parseUrlAndNavigate);
+    return () => {
+      window.removeEventListener('popstate', parseUrlAndNavigate);
+    };
+  }, [state.items, state.notes]);
 
   const triggerToast = useCallback((message: string, type: 'success' | 'error' | 'info' | 'warning' = 'info') => {
     const id = Math.random().toString(36).substr(2, 9);
@@ -850,7 +978,7 @@ export default function App() {
     let changed = false;
 
     // Helper to send a native push notification through the registered service worker
-    const sendPushNotification = (id: string, title: string, body: string) => {
+    const sendPushNotification = (id: string, title: string, body: string, actionUrl?: string) => {
       if (currentDispatched.includes(id)) return;
       
       currentDispatched.push(id);
@@ -864,7 +992,7 @@ export default function App() {
             badge: '/logo(TSPb).png',
             vibrate: [200, 100, 200],
             tag: id,
-            data: { url: window.location.origin }
+            data: { url: actionUrl || window.location.origin }
           } as any);
         }).catch(() => {
           new Notification(title, { body, icon: '/logo(TSPb).png' });
@@ -881,7 +1009,8 @@ export default function App() {
         sendPushNotification(
           alertId,
           `⚠️ Low Stock: ${item.translations?.en || item.name}`,
-          `Only ${item.quantity} ${item.unit || 'PCS'} left in physical inventory! Please reorder soon.`
+          `Only ${item.quantity} ${item.unit || 'PCS'} left in physical inventory! Please reorder soon.`,
+          `${window.location.origin}?action=view_item&id=${item.id}`
         );
       }
     });
@@ -903,14 +1032,16 @@ export default function App() {
               sendPushNotification(
                 alertId,
                 `🔴 Overdue Udhar: ${note.udharPerson}`,
-                `Outstanding balance of ₹${remainingAmount.toLocaleString()} was due on ${new Date(note.dueDate).toLocaleDateString()}.`
+                `Outstanding balance of ₹${remainingAmount.toLocaleString()} was due on ${new Date(note.dueDate).toLocaleDateString()}.`,
+                `${window.location.origin}?action=view_note&id=${note.id}`
               );
             } else if (diffDays <= 1) {
               const alertId = `push-duesoon-${note.id}-${dueDateStr}`;
               sendPushNotification(
                 alertId,
                 `📅 Settlement Due: ${note.udharPerson}`,
-                `₹${remainingAmount.toLocaleString()} is due for settlement ${diffDays === 0 ? 'today' : 'tomorrow'} (${new Date(note.dueDate).toLocaleDateString()}).`
+                `₹${remainingAmount.toLocaleString()} is due for settlement ${diffDays === 0 ? 'today' : 'tomorrow'} (${new Date(note.dueDate).toLocaleDateString()}).`,
+                `${window.location.origin}?action=view_note&id=${note.id}`
               );
             }
           }
@@ -929,14 +1060,16 @@ export default function App() {
           sendPushNotification(
             alertId,
             `⏰ Overdue Reminder: ${note.title}`,
-            `${note.description || 'Action required.'} (Scheduled for ${new Date(note.dueDate).toLocaleDateString()})`
+            `${note.description || 'Action required.'} (Scheduled for ${new Date(note.dueDate).toLocaleDateString()})`,
+            `${window.location.origin}?action=view_note&id=${note.id}`
           );
         } else if (diffDays <= 0) {
           const alertId = `push-reminder-today-${note.id}`;
           sendPushNotification(
             alertId,
             `⏰ Reminder Today: ${note.title}`,
-            `${note.description || 'Action required today!'}`
+            `${note.description || 'Action required today!'}`,
+            `${window.location.origin}?action=view_note&id=${note.id}`
           );
         }
       }
@@ -1391,7 +1524,9 @@ export default function App() {
     const unsubSettings = onSnapshot(userDocRef, (snap) => {
       if (snap.exists()) {
         const data = snap.data();
-        setState(prev => ({ ...prev, settings: { ...prev.settings, ...data } }));
+        // Ignore theme-related settings from Firebase so they are purely local
+        const { theme, ultraPremiumPalette, ultraPremiumSpeed, enableBgColorChange, ...cleanData } = data;
+        setState(prev => ({ ...prev, settings: { ...prev.settings, ...cleanData } }));
       }
     }, (error) => {
       console.error("Settings sync error:", error);
@@ -1548,7 +1683,11 @@ export default function App() {
 
       // Cloud Persistence
       if (state.user && (updates.autoCloudSync ?? state.settings.autoCloudSync)) {
-        await setDoc(doc(db, 'users', state.user.uid), updates, { merge: true });
+        // Exclude theme-related properties so they are stored purely locally
+        const { theme, ultraPremiumPalette, ultraPremiumSpeed, enableBgColorChange, ...cleanUpdates } = updates;
+        if (Object.keys(cleanUpdates).length > 0) {
+          await setDoc(doc(db, 'users', state.user.uid), cleanUpdates, { merge: true });
+        }
       }
 
       // If we just enabled sync, ensure local storage doesn't conflict
@@ -2192,9 +2331,11 @@ export default function App() {
                onClick={() => setActiveTab('notifications')}
             >
                <Bell size={20} className="text-white/80" />
-               <span className="absolute -top-1 -right-1 h-4 w-4 bg-red-500 rounded-full border-2 border-[var(--primary)] text-[8px] flex items-center justify-center font-bold">
-                 {state.notes.filter(n => n.status === 'Active').length + state.items.filter(item => item.quantity <= 5).length}
-               </span>
+               {activeAlertsCount > 0 && (
+                 <span className="absolute -top-1 -right-1 h-4 w-4 bg-red-500 rounded-full border-2 border-[var(--primary)] text-[8px] flex items-center justify-center font-bold animate-pulse">
+                   {activeAlertsCount}
+                 </span>
+               )}
             </div>
             <button 
               id="tour-lock"
@@ -2578,15 +2719,39 @@ export default function App() {
                {/* Registry Grid */}
                <div className="space-y-6">
                  {/* Search at top of list */}
-                 <div id="tour-search" className="relative group">
+                 <div id="tour-search" className="relative group flex items-center">
                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--primary)] opacity-40 transition-opacity group-focus-within:opacity-100" size={20} />
                    <SnappyInput 
                      type="text"
                      placeholder={t.search}
-                     className="w-full rounded-2xl border border-[var(--border)] bg-[var(--card)] py-4 pl-12 pr-4 text-sm focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)] focus:outline-none shadow-sm transition-all"
+                     className="w-full rounded-2xl border border-[var(--border)] bg-[var(--card)] py-4 pl-12 pr-12 text-sm focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)] focus:outline-none shadow-sm transition-all"
                      value={searchQuery}
                      onChange={val => setSearchQuery(val)}
                    />
+                   <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
+                     {searchQuery && (
+                       <button
+                         type="button"
+                         onClick={() => setSearchQuery('')}
+                         className="p-1 rounded-full hover:bg-[var(--foreground)]/5 text-[var(--foreground)] opacity-50 hover:opacity-100 transition-opacity cursor-pointer"
+                       >
+                         <X size={14} />
+                       </button>
+                     )}
+                     <button
+                       type="button"
+                       onClick={startSearchVoiceSearch}
+                       className={cn(
+                         "p-1.5 rounded-lg transition-all active:scale-95 flex items-center justify-center cursor-pointer",
+                         isListeningSearchVoice
+                           ? "bg-red-500 text-white animate-pulse"
+                           : "text-[var(--primary)] hover:bg-[var(--primary)]/10"
+                       )}
+                       title="Voice Search"
+                     >
+                       <Mic size={16} />
+                     </button>
+                   </div>
                  </div>
   
                  <div className="flex items-center justify-between px-1">
@@ -3022,6 +3187,16 @@ export default function App() {
               setShowTour(false);
               handleUpdateSettings({ hasSeenOnboarding: true });
             }}
+            t={t}
+          />
+        )}
+        {showNotificationPrompt && (
+          <PushNotificationPromptModal
+            onClose={() => {
+              setShowNotificationPrompt(false);
+              localStorage.setItem('ts_push_prompt_dismissed', 'true');
+            }}
+            onTriggerToast={triggerToast}
             t={t}
           />
         )}
@@ -3937,6 +4112,147 @@ function HelpModal({ onClose, t }: { onClose: () => void; t: any }) {
         </div>
       </motion.div>
     </motion.div>
+  );
+}
+
+/**
+ * PushNotificationPromptModal Sub-component
+ */
+function PushNotificationPromptModal({ 
+  onClose, 
+  onTriggerToast, 
+  t 
+}: { 
+  onClose: () => void; 
+  onTriggerToast: (message: string, type?: 'success' | 'error' | 'info' | 'warning') => void; 
+  t: any; 
+}) {
+  const [isRequesting, setIsRequesting] = useState(false);
+
+  const handleRequestPermission = async () => {
+    setIsRequesting(true);
+    try {
+      if (!('Notification' in window)) {
+        onTriggerToast("Notifications are not supported in this browser.", "error");
+        onClose();
+        return;
+      }
+
+      const permission = await Notification.requestPermission();
+      if (permission === 'granted') {
+        onTriggerToast("Notifications enabled successfully!", "success");
+        
+        // Show a test notification immediately
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.getRegistration().then((reg) => {
+            if (reg) {
+              reg.showNotification("🎉 Push Notifications Enabled!", {
+                body: "You will now receive stock alerts, udhar reminders, and receipt confirmations instantly.",
+                icon: '/logo(TSPb).png',
+                badge: '/logo(TSPb).png',
+                vibrate: [200, 100, 200]
+              } as any);
+            } else {
+              new Notification("🎉 Push Notifications Enabled!", {
+                body: "You will now receive stock alerts, udhar reminders, and receipt confirmations instantly.",
+                icon: '/logo(TSPb).png'
+              });
+            }
+          });
+        } else {
+          new Notification("🎉 Push Notifications Enabled!", {
+            body: "You will now receive stock alerts, udhar reminders, and receipt confirmations instantly.",
+            icon: '/logo(TSPb).png'
+          });
+        }
+      } else if (permission === 'denied') {
+        onTriggerToast("Notification permission was denied. You can enable them later in your browser settings.", "warning");
+      } else {
+        onTriggerToast("Notification permission was dismissed.", "info");
+      }
+    } catch (error) {
+      console.error("Error requesting notification permission:", error);
+      onTriggerToast("An error occurred while enabling notifications.", "error");
+    } finally {
+      setIsRequesting(false);
+      onClose();
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[200] pointer-events-none">
+      <motion.div 
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="absolute inset-0 flex items-center justify-center p-6 bg-black/40 backdrop-blur-[2px] pointer-events-auto"
+      >
+        <motion.div 
+          initial={{ opacity: 0, y: 30, scale: 0.95 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: 20, scale: 0.95 }}
+          transition={{ type: "spring", damping: 25, stiffness: 350 }}
+          className="w-full max-w-md bg-[var(--card)] rounded-[2.5rem] border-2 border-[var(--primary)] shadow-[0_30px_60px_rgba(0,0,0,0.6)] p-8 text-center relative overflow-hidden group"
+        >
+          <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-amber-500 via-[var(--primary)] to-emerald-500" />
+          
+          <div className="mb-6 flex justify-center">
+            <div className="p-5 rounded-3xl bg-[var(--primary)]/5 relative">
+              <Bell className="text-amber-500 animate-bounce" size={36} />
+              <motion.div 
+                animate={{ scale: [1, 1.3, 1], opacity: [0.3, 0.6, 0.3] }}
+                transition={{ duration: 2.5, repeat: Infinity }}
+                className="absolute inset-0 bg-[var(--primary)]/10 rounded-full blur-xl"
+              />
+            </div>
+          </div>
+          
+          <h3 className="text-xl font-black tracking-tight mb-2 uppercase">
+            Stay Instantly Notified 🔔
+          </h3>
+          <p className="text-xs font-semibold text-[var(--foreground)] opacity-70 leading-relaxed mb-6">
+            Get real-time push notifications for low physical stock warning alerts, overdue settlement reminders (Udhar/Debts), and instant receipts!
+          </p>
+
+          <div className="p-4 rounded-2xl bg-[var(--foreground)]/5 border border-[var(--border)] mb-8 text-left space-y-3">
+            <div className="flex items-center gap-2.5 text-xs">
+              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-amber-500/15 text-amber-500 text-[10px] font-black">1</span>
+              <span className="opacity-80 font-medium">⚠️ Real-time low physical inventory alerts</span>
+            </div>
+            <div className="flex items-center gap-2.5 text-xs">
+              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-500 text-[10px] font-black">2</span>
+              <span className="opacity-80 font-medium">📅 Dues/Overdue Udhar settlement alerts</span>
+            </div>
+            <div className="flex items-center gap-2.5 text-xs">
+              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-sky-500/15 text-sky-500 text-[10px] font-black">3</span>
+              <span className="opacity-80 font-medium">📊 Instant automated sync of ledger balances</span>
+            </div>
+          </div>
+          
+          <div className="flex flex-col gap-3">
+            <Button 
+              onClick={handleRequestPermission}
+              disabled={isRequesting}
+              className="w-full h-12 rounded-2xl shadow-lg shadow-[var(--primary)]/20 text-sm font-bold flex items-center justify-center gap-2"
+            >
+              {isRequesting ? (
+                <div className="h-5 w-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : (
+                "Enable Push Notifications"
+              )}
+            </Button>
+            <Button 
+              variant="ghost" 
+              onClick={onClose}
+              disabled={isRequesting}
+              className="w-full h-10 rounded-2xl text-[10px] font-black uppercase tracking-widest opacity-45 hover:opacity-100 transition-opacity"
+            >
+              Maybe Later
+            </Button>
+          </div>
+        </motion.div>
+      </motion.div>
+    </div>
   );
 }
 
@@ -6364,7 +6680,6 @@ function ProfileScreen({ state, t, deferredPrompt, onInstall, onShareProductList
       {state.user && state.user.uid !== 'guest' && (
         <div className="space-y-6">
           <AccountSyncCard onTriggerToast={onTriggerToast} />
-          <WebPushNotificationCard onTriggerToast={onTriggerToast} />
         </div>
       )}
 

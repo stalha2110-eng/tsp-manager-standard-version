@@ -40,7 +40,7 @@ import {
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Item, Category } from '../types';
-import { triggerHapticFeedback, playSynthesizedSound } from '../lib/utils';
+import { triggerHapticFeedback, playSynthesizedSound, cn } from '../lib/utils';
 import { auth, db } from '../firebase';
 import { 
   collection, 
@@ -116,6 +116,7 @@ interface POSBillItem {
   notes: string;
   retailPrice: number;
   wholesalePrice: number;
+  unit?: string;
 }
 
 interface CalcHistoryEntry {
@@ -1243,7 +1244,8 @@ export default function CalculatorWorkspace({
       tax: 0,
       notes: '',
       retailPrice: item.retailPrice,
-      wholesalePrice: item.wholesalePrice
+      wholesalePrice: item.wholesalePrice,
+      unit: item.unit
     };
 
     setBillItems(prev => [...prev, newBillItem]);
@@ -2120,7 +2122,7 @@ export default function CalculatorWorkspace({
 
                   {/* Interactive input */}
                   <div className="relative flex items-center bg-[var(--foreground)]/5 rounded-xl border border-[var(--border)] px-3 py-1 focus-within:border-amber-500/40 transition-colors">
-                    <Search size={16} className="text-slate-500" />
+                    <Search size={16} className="text-slate-500 shrink-0" />
                     <input
                       id="calc-search-input"
                       type="text"
@@ -2132,18 +2134,31 @@ export default function CalculatorWorkspace({
                       onKeyDown={handleSearchKeyDown}
                       placeholder="Search items by keyboard..."
                       autoFocus={settings.autoFocusSearch}
-                      className="w-full bg-transparent border-0 text-[var(--foreground)] text-xs outline-none px-2.5 py-2 placeholder-[var(--foreground)]/40"
+                      className="w-full bg-transparent border-0 text-[var(--foreground)] text-xs outline-none pl-2.5 pr-12 py-2 placeholder-[var(--foreground)]/40"
                     />
-                    {settings.enableVoiceSearch && (
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
+                      {searchQuery && (
+                        <button
+                          onClick={() => {
+                            setSearchQuery('');
+                            setActiveSearchIndex(0);
+                          }}
+                          className="h-7 w-7 rounded-lg flex items-center justify-center text-[var(--foreground)]/40 hover:text-[var(--foreground)] transition-colors border-0 bg-transparent cursor-pointer"
+                          title="Clear search"
+                        >
+                          <X size={13} />
+                        </button>
+                      )}
                       <button
                         onClick={startVoiceSearch}
                         className={`h-7 w-7 rounded-lg flex items-center justify-center transition-colors border-0 bg-transparent cursor-pointer ${
                           isListeningVoice ? 'bg-red-500/20 text-red-400 animate-pulse' : 'text-[var(--foreground)]/60 hover:text-[var(--foreground)]'
                         }`}
+                        title="Voice Search"
                       >
                         {isListeningVoice ? <MicOff size={13} /> : <Mic size={13} />}
                       </button>
-                    )}
+                    </div>
                   </div>
 
                   {/* Search results suggestions */}
@@ -2348,10 +2363,16 @@ export default function CalculatorWorkspace({
                                     {item.productId && (
                                       <button
                                         onClick={() => toggleItemPriceType(item.id)}
-                                        className="text-[7px] px-1.5 py-0.5 rounded bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 border border-amber-500/20 transition-all cursor-pointer uppercase font-bold tracking-wider inline-flex items-center gap-1"
-                                        title="Switch rate between retail and wholesale"
+                                        className={cn(
+                                          "text-[7px] px-1.5 py-0.5 rounded transition-all cursor-pointer uppercase font-bold tracking-wider inline-flex items-center gap-1 border",
+                                          item.priceType === 'retail' 
+                                            ? "bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 border-emerald-500/20" 
+                                            : "bg-purple-500/10 hover:bg-purple-500/20 text-purple-500 border-purple-500/20"
+                                        )}
+                                        title={`Switch to ${item.priceType === 'retail' ? 'Wholesale' : 'Retail'} rate`}
                                       >
-                                        Exchange Rate ({item.priceType === 'retail' ? 'Retail' : 'Wholesale'} ⇄ {item.priceType === 'retail' ? 'Wholesale' : 'Retail'})
+                                        <RefreshCw size={6} className="shrink-0 animate-spin-slow" />
+                                        {item.priceType === 'retail' ? 'Retail' : 'Wholesale'}
                                       </button>
                                     )}
                                   </div>
@@ -2406,6 +2427,15 @@ export default function CalculatorWorkspace({
                                       className="w-full bg-transparent border-0 text-[var(--foreground)] font-mono text-[10px] outline-none"
                                     />
                                   </div>
+                                  {(() => {
+                                    const catalogItem = item.productId ? items.find(i => i.id === item.productId) : null;
+                                    const displayUnit = item.unit || catalogItem?.unit;
+                                    return displayUnit ? (
+                                      <span className="text-[8px] text-sky-500 font-bold uppercase tracking-wider text-center mt-0.5 truncate max-w-20" title={`Per ${displayUnit}`}>
+                                        /{displayUnit}
+                                      </span>
+                                    ) : null;
+                                  })()}
                                 </div>
 
                                 {/* Discount */}
